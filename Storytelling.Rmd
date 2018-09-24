@@ -1,0 +1,129 @@
+---
+title: "What factors attribute to employees left in IBM"
+author: "Mengyao Zhang"
+output:
+  html_document:
+    toc: yes
+    toc_depth: '3'
+  html_notebook:
+    number_sections: yes
+    toc: yes
+    toc_depth: 3
+  word_document:
+    toc: yes
+---
+
+```{r echo=FALSE, message=FALSE}
+rm(list=ls(all=TRUE)) 
+ibm <- read.csv("ibm.csv")
+df <- ibm[, c(-4,-9,-10,-13,-20,-22,-27)]
+# Load packages
+library(plyr);
+library(tidyverse);
+library(gridExtra)
+library(GGally)
+library(plotly)
+```
+
+
+# Introduction
+  Human resource management is one of the most important aspects of a company. HRs are responsible for not only hiring good candidates but also retaining the best employees. A company with a very high turnover rate may have to deal with the extra cost of recruitment. Also, the stability of the company can be negatively impacted. I would like to use data analysis methods to explore what factors contribute to the employee attrition of a company and how significant those factors are. The dataset used in this study was created by an IBM data scientist based on the real situation of the company. The dataset includes information from 1470 employees, among which 237 employees have already left the company. Note that retirement is also considered as a part of employee attrition, but since the data does not distinguish retirement from left job, so we will ignore a few dimission with old ages.
+
+  
+# Main factors that contribute to employees attrition
+
+## Monthly Income
+
+Let’s begin with the monthly income since money plays an important role in our job selection. The interactive density plot below shows the distribution of monthly income for both current employees and employees who have left. As indicated by the figure, employees with the monthly income lower than 3800 dollars are more likely to leave the company. Employees with the monthly income around 2500 dollars have the highest demission rate. People who make more than 3800 dollars are more likely to stay with an exception of those whose income is between $9000 and $11000. The density plot for people who left has the second peak in this range. We assume that these high-paid employees are in some important position, so we would like to know what caused them to leave. 
+
+
+```{r echo=FALSE, message=FALSE}
+# density graph 
+plo<-ggplot(df, aes(x = MonthlyIncome, fill = Attrition))+
+  geom_density(alpha = 0.4) +
+  guides(fill=guide_legend(title=NULL))+
+  ggtitle("Employees with monthly income lower than 3000 are more likely to left")+
+  scale_fill_discrete(breaks=c("No","Yes"), labels=c("Stay","Left")) +
+  ylab("Density")
+# interactive figure
+ggplotly(plo)
+```
+
+
+
+To explain the second peak for those who left, we compared these former employees with the current employees whose monthly income is within the same range. We found that stock holding level is the most significant factor that makes the difference. The pie charts below show the percentages of each stock option level for the former and current employees within $ 9000 to $ 11000 income range. For the former employees who left the company, more than half of them did not hold any company stock.  While, about 75% of current employees at least hold some company stocks. 
+
+
+
+```{r echo=FALSE}
+# high-paid employee vs stock numbers 
+s<-df %>%
+  filter(MonthlyIncome>9000 & MonthlyIncome <11000 & Attrition == "Yes") 
+v<- df %>%
+  filter(MonthlyIncome>9000 & MonthlyIncome <11000 & Attrition == "No")
+par(mfrow = c(1, 2))
+pie(table(s$StockOptionLevel),main="Stock Optional Level vs \nLeft Employees", 
+    labels = c("Zero","Low","Medium","Large"))
+pie(table(v$StockOptionLevel), main="Stock Optional Level vs \nStayed Employees",
+    labels = c("Zero","Low","Medium","Large"))
+```
+
+
+
+
+## Age and Commuting distance
+
+The second factor we studied is age. The density plot below shows the distribution of age for both current employees and former employees who left. Employees younger than 33 are more likely to leave. Most of the former employees who left the company are around 30 years old. 
+
+Distance from work to home is the last factor we studied. Most of the current employees live within 15 miles from the company. Employees who live more than 10 miles away from work are more likely to leave.
+
+
+
+```{r echo=FALSE}
+# density graph
+grid.arrange(
+ggplot(df, aes(x =  Age, fill = Attrition))+
+  geom_density(alpha = 0.4) +
+  guides(fill=guide_legend(title=NULL))+
+  ggtitle("Younger employees  are more likely to left")+
+  scale_fill_discrete(breaks=c("No","Yes"), labels=c("Stay","Left")) ,
+
+ggplot(df, aes(x = DistanceFromHome,fill = Attrition ))+
+  geom_density(alpha = 0.4)+
+  guides(fill=guide_legend(title=NULL))+
+  scale_fill_discrete(breaks=c("No","Yes"), labels=c("Stay","Left"))+
+    ggtitle("  Employees who left have longer commuting distance")
+)
+```
+
+
+## Working Over Time
+
+The third factor we studied is working overtime. As we can see from the figure below, there is a higher percentage of employees who have left were working overtime at the company. However, there are 77% of the current employees who are not working over time. So we may infer that most employees left because they work hard but make a relatively low money.
+
+
+```{r}
+prop_f <-
+  as.data.frame(round(prop.table(xtabs(~  OverTime+Attrition,  data = df),2), 2))
+attri <- c("No"="Stay", "Yes"="Left")
+prop_f %>%
+ggplot( aes(x = OverTime, group = Attrition)) + 
+        geom_bar(aes(y = Freq, fill = factor(OverTime)), 
+                   stat="identity") +
+        geom_text(aes(label = Freq, y = Freq), 
+                   stat= "identity", vjust = 1.5) +
+        labs(y = "Frequency", fill= "OverTime") +
+        facet_grid(~Attrition,labeller = as_labeller(attri)) +
+        scale_fill_manual(values = c("#669933","#FFCC66")) + 
+        theme(legend.position = "none", plot.title = element_text(hjust = 0.5)) + 
+        ggtitle("Employees who left have higher probalality working overtime")
+```
+
+
+# Conclusions and Recommendations
+
+From above analysis, we learnt that low monthly income, longer distance from work to home, and younger age all contribute to employees’ attrition in this company. Specifically, an employee who is under 30, lives more than 10 miles away from work and makes less than 3800 dollars is highly likely to quit the job than others. 
+
+To retain those important or good employees, the company could think about granting them more stock options
+To drop the turnover rate, the company could make some related policies for teleworking arrangement and overtime pay. 
+

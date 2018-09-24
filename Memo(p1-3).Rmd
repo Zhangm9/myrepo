@@ -1,0 +1,441 @@
+---
+output: html_document
+---
+
+#### **To:** The museum board of directors  
+  
+#### **From:** Mengyao Zhang  
+  
+#### **Date:** `r format(Sys.time(), '%B %d, %Y')`   
+  
+#### **RE:** Analysis of the proposals for Exhibit  
+
+***
+
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+# Title: Artie's Dream Proposal 1-3
+# Purpose: Provide the solution for proposal 1-3
+# Date: June 10, 2018
+# Author: Mengyao Zhang
+```
+
+ 
+```{r echo = FALSE, message = FALSE, warning = FALSE, results = "hide"}
+# Clear packages 
+if(is.null(sessionInfo()$otherPkgs) == FALSE)lapply(
+  paste("package:", names(sessionInfo()$otherPkgs), sep=""), 
+  detach, character.only = TRUE, unload = TRUE)
+
+# Clear environment
+rm(list = ls(all = TRUE)) 
+
+```
+
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+# Load librarys
+library(knitr) # For making a nice table, there are options to make nicer tables
+library(lpSolveAPI)
+library(kableExtra)
+library(dplyr)
+#reads all data from the excel file
+dat <- read.csv("5260_S18_Arties_Dream.csv",header = TRUE,stringsAsFactors = FALSE,fileEncoding="latin1") 
+```
+
+### Introduction
+
+As you all know, Artie Fophartie decided to use his own money to fund an exhibit of up-and-coming modern artists at the Seattle Museum of Modern Art. The success of this exhibition will benefit not only the artists but also the citizens. Currently, there are 34 pieces of art available but considering the limited budget and spaces, only part of them could be displayed. In addition, Artie and Celeste, as the sponor and the museum director, respectively, possess their requiements and agenda for this exhibit. 
+
+To ensure the success of the exhibition, as an analyst, I analyze three proposals and 
+find out the optimal solutions that meet both Artie and Celeste's requirments. The three proposals are:   
+1) Maximize the number of pieces displayed within $4 million budget;   
+2) Minimize the cost including at least 20 pieces;   
+3) The impact on proposal 2 if the cost of each piece randomly change between –20% and +20%.
+
+***
+### Solution for proposal 1: Maximaze the number of pieces
+
+
+```{r, include=FALSE}
+# rename two columns 
+colnames(dat)[colnames(dat)=="Price...1000."] <- "Price"
+colnames(dat)[colnames(dat)=="Artist..Piece"] <- "Artist_Piece"
+
+# remove the symbols from column "Piece"
+dat$Piece <- gsub("\u0093","",dat$Piece)
+dat$Piece <- gsub("\u0094","",dat$Piece)
+```
+
+```{r,include=FALSE}
+# define constraint matrix
+mat1 <- matrix(rep(0,length = 850),nrow = 25,ncol = 34)
+colnames(mat1) <- c(1:34)
+
+# 1) set budget constraint
+for (i in 1:34){
+  colnames(mat1)[i] <- dat[i,1]
+  mat1[1,i] <- dat[i,"Price"]
+}
+
+# 2) set "only one collage" constraint
+for (i in grep("collage",dat$Description)) {
+  mat1[2,i] <- 1
+}
+
+# 3-7) set "wire mesh if computer-generated" constraint
+for (i in grep("wire mesh",dat$Description)) {
+  mat1[3,i] <- -1
+  mat1[4,i] <- -1
+}
+for (i in grep("computer-generated",dat$Description)[1]) {
+  mat1[3,i] <- 1
+}
+for (i in grep("computer-generated",dat$Description)[2]) {
+  mat1[4,i] <- 1
+}
+
+for (i in grep("wire mesh",dat$Description)[1]) {
+  mat1[5,i] <- 1
+}
+for (i in grep("wire mesh",dat$Description)[2]) {
+  mat1[6,i] <- 1
+}
+for (i in grep("wire mesh",dat$Description)[3]) {
+  mat1[7,i] <- 1
+}
+for (i in grep("computer-generated",dat$Description)) {
+  mat1[5,i] <- -1
+  mat1[6,i] <- -1
+  mat1[7,i] <- -1
+}
+
+
+
+# 8) set "photo-realistic" constraint
+for (i in grep("photo-realistic",dat$Description)) {
+  mat1[8,i] <- 1
+}
+# 9) set "cubist paint" constraint
+for (i in grep("cubist",dat$Description)) {
+  mat1[9,i] <- 1
+}
+# 10) set "watercolor" constraint
+for (i in grep("water",dat$Description)) {
+  mat1[10,i] <- 1
+}
+# 11) set "oil paint" constraint
+for (i in grep("oil",dat$Description)) {
+  mat1[11,i] <- 1
+}
+# 12）set "expressionist" constraint
+for (i in grep("expressionist",dat$Description)) {
+  mat1[12,i] <- 1
+}
+
+
+# 13) set "painting < 2 times of other forms" constraint
+for (i in grep("painting",dat$Description)) {
+  mat1[13,i] <- 1
+}
+for (i in grep("collage|drawing|sculpture",dat$Description)) {
+  mat1[13,i] <- -2
+}
+
+# 14) set "all Artie & all Helen's painting" constraint
+for (i in grep("Artie|Helen",dat$Artist)) {
+  mat1[14,i] <- 1
+}
+# 15) set "David >= 1" constraint
+for (i in grep("David",dat$Artist)) {
+  mat1[15,i] <- 1
+}
+# 16) set "Ziggy >= 1" constraint
+for (i in grep("Ziggy",dat$Artist)) {
+  mat1[16,i] <- 1
+}
+# 17) set "David = Ziggy " constraint
+for (i in 1:ncol(mat1)) {
+  if(dat[i,"Artist"]=="David Lyman"){
+    mat1[17,i] <- 1
+  }else if (dat[i,"Artist"]=="Ziggy Stardust") {
+    mat1[17,i] <- -1  
+  }else {
+    mat1[17,i] <- 0  
+    }
+}
+
+# 18) set "Rick <= 1 " constraint
+for (i in grep("Rick",dat$Artist)) {
+  mat1[18,i] <- 1
+}
+
+# set Celeste's constraints in matrix
+# 19) Female >= 1/2 Male
+for (i in 1:ncol(mat1)) {
+  ifelse(dat[i,"Gender"]=="F", mat1[19,i]<-2, mat1[19,i]<- -1)
+}
+```
+
+
+```{r,include=FALSE}
+# 20) 'Aging earth" or/and "wasted resources"
+for (i in grep("Aging Earth|Wasted Resources",dat$Piece)) {
+  mat1[20,i] <- 1
+}
+# 21) at least one piece by Bear Canton
+for (i in grep("Bear",dat$Artist)) {
+  mat1[21,i] <- 1
+}
+# 22) at least one of the following pieces:“Beyond,” “Who Has Control,” “Where are we now?” and “Pioneers.”
+for (i in grep("Beyond|Who Has Control|Where are we now?|Pioneers",dat$Piece)) {
+  mat1[22,i] <- 1
+}
+
+# 23) limited space for scupture
+for (i in grep("sculpture",dat$Description)) {
+  mat1[23,i] <- 1
+}
+# 24) limited space for collage + drawing + painting
+for (i in grep("collage|drawing|painting",dat$Description)) {
+  mat1[24,i] <- 1
+}
+# 25)  if “Narcissism” is displayed, then “Reflection” display
+for (i in 1:ncol(mat1)) {
+  if(dat[i,"Piece"]=="Narcissism"){
+    mat1[25,i] <- 1
+  }else if (dat[i,"Piece"]=="Reflection") {
+    mat1[25,i] <- -1  
+  }else {
+    mat1[25,i] <- 0  
+    }
+}
+```
+
+
+```{r,include=FALSE}
+# Set up maximize the number of pieces with BIP
+p1_bip <- make.lp(0, 34)
+
+# Set up model
+obj_fn <- rep(1,length = 34)
+set.objfn(p1_bip, obj_fn)
+
+# set constraints by Artie
+add.constraint(p1_bip, mat1[1,], "<=", 4000)  # 1)budget <= 4M
+add.constraint(p1_bip, mat1[2,], "=", 1)      # 2)only one collage
+
+# 3-7) at least one wire mesh if has computer-generated
+for (i in 3:7){
+add.constraint(p1_bip, mat1[i,], "<=", 0) 
+}
+
+# 8-12)at least one photo-realistic,one cubist,one watercolor,one oil painting,one expressionist
+for (i in 8:12) {
+add.constraint(p1_bip, mat1[i,], ">=", 1)    
+}
+
+add.constraint(p1_bip, mat1[13,], "<=", 0)     # 13) painting < 2 times of other forms
+add.constraint(p1_bip, mat1[14,], "=", sum(mat1[14,])) # 14) all Artie & Helen's painting are displayed
+add.constraint(p1_bip, mat1[15,], ">=", 1)     # 15) David >= 1
+add.constraint(p1_bip, mat1[16,], ">=", 1)     # 16) Ziggy >= 1
+add.constraint(p1_bip, mat1[17,], "=", 0)      # 17) David = Ziggy 
+add.constraint(p1_bip, mat1[18,], "<=", 1)     # 18) Rick <= 1
+
+# set constraints by Celeste
+add.constraint(p1_bip, mat1[19,], ">=", -1)    # 19) 2*Female - Male >= -1
+add.constraint(p1_bip, mat1[20,], ">=", 1)     # 20)"Aging earth" or/and "wasted resources"
+add.constraint(p1_bip, mat1[21,], ">=", 1)     # 21) Bear >= 1
+add.constraint(p1_bip, mat1[22,], ">=", 1)     # 22) at least one of the four pieces: beyond...
+add.constraint(p1_bip, mat1[23,], "<=", 4)     # 23) sculpture <= 4
+add.constraint(p1_bip, mat1[24,], "<=", 20)    # 24) other forms of art <= 20
+add.constraint(p1_bip, mat1[25,], "<=", 0)     # 25) if “Narcissism”  then “Reflection” 
+
+# Set the type "binary" of each decision variable
+for (i in 1:34) {
+  set.type(p1_bip, i, "binary")
+}
+# Solve the model, if this return 0 an optimal solution is found
+solve(p1_bip)
+```
+
+
+```{r, echo= FALSE, include=FALSE}
+get.objective(p1_bip)
+get.solutioncount(p1_bip)
+get.variables(p1_bip) 
+```
+
+There are at most 15 pieces shown as below could be displayed, with the total cost of $3.95 million dollars.  
+
+```{r echo=FALSE}
+# Generate the solution1 table
+result1 <- vector()
+for (i in 1:34) {
+  if(get.variables(p1_bip)[i] == 1) {
+    result1 <- rbind(result1, c(i, unlist(dat[i,-1], use.names = FALSE)))
+  } else {next
+    }
+}
+colnames(result1) <- c(" ", colnames(dat[-1]))
+
+kable(result1, format = "html") %>%
+  kable_styling("striped")
+```
+
+***
+### Solution for proposal 2: Minimize the Cost
+
+```{r,include=FALSE}
+# 1) adjust the first row of matrix
+for (i in 1:34){
+  mat1[1,i] <- 1
+}
+# Set up maximize the number of pieces with BIP
+p1_bip <- make.lp(0, 34)
+# Set up model
+obj_fn <- dat[,"Price"]
+set.objfn(p1_bip, obj_fn)
+
+# set constraints by Artie
+add.constraint(p1_bip, mat1[1,], ">=", 20)    # 1) at least 20 pieces
+add.constraint(p1_bip, mat1[2,], "=", 1)      # 2) only one collage
+
+# 3-7) at least one wire mesh if has computer-generated
+for (i in 3:7){
+add.constraint(p1_bip, mat1[i,], "<=", 0) 
+}
+
+# 8-12)at least one photo-realistic,one cubist,one watercolor,one oil painting,one expressionist
+for (i in 8:12) {
+add.constraint(p1_bip, mat1[i,], ">=", 1)    
+}
+
+add.constraint(p1_bip, mat1[13,], "<=", 0)     # 13) painting < 2 times of other forms
+add.constraint(p1_bip, mat1[14,], "=", sum(mat1[14,])) # 14) all Artie & Helen's painting are displayed
+add.constraint(p1_bip, mat1[15,], ">=", 1)     # 15) David >= 1
+add.constraint(p1_bip, mat1[16,], ">=", 1)     # 16) Ziggy >= 1
+add.constraint(p1_bip, mat1[17,], "=", 0)      # 17) David = Ziggy 
+add.constraint(p1_bip, mat1[18,], "<=", 1)     # 18) Rick <= 1
+
+# set constraints by Celeste
+add.constraint(p1_bip, mat1[19,], ">=", -1)    # 19) 2*Female - Male >= -1
+add.constraint(p1_bip, mat1[20,], ">=", 1)     # 20)"Aging earth" or/and "wasted resources"
+add.constraint(p1_bip, mat1[21,], ">=", 1)     # 21) Bear >= 1
+add.constraint(p1_bip, mat1[22,], ">=", 1)     # 22) at least one of the four pieces: beyond...
+add.constraint(p1_bip, mat1[23,], "<=", 4)     # 23) sculpture <= 4
+add.constraint(p1_bip, mat1[24,], "<=", 20)    # 24) other forms of art <= 20
+add.constraint(p1_bip, mat1[25,], "<=", 0)     # 25) if “Narcissism”  then “Reflection” 
+
+# Set the type "binary" of each decision variable
+for (i in 1:34) {
+  set.type(p1_bip, i, "binary")
+}
+# Solve the model, if this return 0 an optimal solution is found
+solve(p1_bip)
+```
+
+
+```{r, include=FALSE}
+solve(p1_bip)
+get.objective(p1_bip)
+get.solutioncount(p1_bip)
+get.variables(p1_bip) 
+```
+
+To including at least 20 pieces, the table below shown the pieces could be displayed. There are exact 20 pieces been selected at the minimum cost of $5.45 million dollars.
+
+```{r echo=FALSE}
+# Generate random variables for a table
+result2 <- vector()
+for (i in 1:34) {
+  if(get.variables(p1_bip)[i] == 1) {
+    result2 <- rbind(result2, c(i, unlist(dat[i,-1], use.names = FALSE)))
+  } else {next
+    }
+}
+colnames(result2) <- c(" ", colnames(dat[-1]))
+kable(result2, format = "html") %>%
+  kable_styling("striped")
+```
+
+***
+
+### Solution for proposal 3:
+```{r,include=FALSE}
+set.seed(1234)
+
+total_cost <- vector()
+n <- 1000
+for (i in 1:n) {
+dat$change <- round(runif(34,0.8,1.2),2)
+dat$new_price <- dat$Price * dat$change
+# Set up maximize the number of pieces with BIP
+p1_bip <- make.lp(0, 34)
+# Set up model
+obj_fn <- dat[,"new_price"]
+set.objfn(p1_bip, obj_fn)
+
+# set constraints by Artie
+add.constraint(p1_bip, mat1[1,], ">=", 20)    # 1) at least 20 pieces
+add.constraint(p1_bip, mat1[2,], "=", 1)      # 2) only one collage
+
+# 3-7) at least one wire mesh if has computer-generated
+for (i in 3:7){
+add.constraint(p1_bip, mat1[i,], "<=", 0) 
+}
+
+# 8-12)at least one photo-realistic,one cubist,one watercolor,one oil painting,one expressionist
+for (i in 8:12) {
+add.constraint(p1_bip, mat1[i,], ">=", 1)    
+}
+
+add.constraint(p1_bip, mat1[13,], "<=", 0)     # 13) painting < 2 times of other forms
+add.constraint(p1_bip, mat1[14,], "=", sum(mat1[14,])) # 14) all Artie & Helen's painting are displayed
+add.constraint(p1_bip, mat1[15,], ">=", 1)     # 15) David >= 1
+add.constraint(p1_bip, mat1[16,], ">=", 1)     # 16) Ziggy >= 1
+add.constraint(p1_bip, mat1[17,], "=", 0)      # 17) David = Ziggy 
+add.constraint(p1_bip, mat1[18,], "<=", 1)     # 18) Rick <= 1
+
+# set constraints by Celeste
+add.constraint(p1_bip, mat1[19,], ">=", -1)    # 19) 2*Female - Male >= -1
+add.constraint(p1_bip, mat1[20,], ">=", 1)     # 20)"Aging earth" or/and "wasted resources"
+add.constraint(p1_bip, mat1[21,], ">=", 1)     # 21) Bear >= 1
+add.constraint(p1_bip, mat1[22,], ">=", 1)     # 22) at least one of the four pieces: beyond...
+add.constraint(p1_bip, mat1[23,], "<=", 4)     # 23) sculpture <= 4
+add.constraint(p1_bip, mat1[24,], "<=", 20)    # 24) other forms of art <= 20
+add.constraint(p1_bip, mat1[25,], "<=", 0)     # 25) if “Narcissism”  then “Reflection” 
+
+# Set the type "binary" of each decision variable
+for (i in 1:34) {
+  set.type(p1_bip, i, "binary")
+}
+# Solve the model, if this return 0 an optimal solution is found
+solve(p1_bip)
+
+total_cost <- rbind(total_cost, get.objective(p1_bip))
+}
+
+result_cost <- round(rbind(mean(total_cost), sd(total_cost),max(total_cost), min(total_cost)), 2)
+colnames(result_cost) <- 'Total Cost ($1000)'
+rownames(result_cost) <- c('mean','standard diviation', "max", "min")
+result_cost
+```
+
+From the solution for proposal 2, the cost is $5.45 million. While after the randomly changing of the cost of each piece between -20% and +20%, the mean value of the total cost becomes $5.403 million, which decreased by about $47,000 dollars. In addition, since the standard diviation is relatively low compared to the mean value, it means that other total cost are closed to the average cost. So we don't need to worry about the big change of the total cost that the changing of may generate。
+
+```{r, echo=FALSE}
+kable(result_cost, align = "c")
+```
+
+
+***
+
+### Conclusion
+
+Through the above analysis, I think this exhibition will be an amazing event because we included all forms of the art we have, such as photograph, painting, sculpture and so on. Besides, as thoughtful as Celeste is, many pieces from female artists and native Americans are included, which shows the respect and support to a diverse population of artists. Many pieces that reflect current issues are included, for example, "Wasted Resources" could appeal to the citizens for save the natrural resources. Hope you could approve these great exhibits.
+  
+ 
+   
+   
+        
